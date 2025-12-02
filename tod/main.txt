@@ -1,0 +1,365 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/mux"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+// Simple Todo API with JWT authentication
+// Single-file implementation using GORM + SQLite and Gorilla Mux.
+
+var (
+	db        *gorm.DB
+	jwtSecret []byte
+	tokenTTL  = time.Hour * 24
+)
+
+// Models
+type User struct {
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	Username string `gorm:"uniqueIndex;not null" json:"username"`
+	Password string `gorm:"not null" json:"-"`
+	Tasks    []Task `json:"tasks,omitempty"`
+}
+
+type Task struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Title       string    `gorm:"not null" json:"title"`
+	Description string    `json:"description"`
+	Completed   bool      `gorm:"default:false" json:"completed"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	UserID      uint      `json:"user_id"`
+}
+
+// JWT claims
+type Claims struct {
+	UserID uint `json:"user_id"`
+	jwt.RegisteredClaims
+}
+
+// Helpers
+func hashPassword(password string) (string, error) {
+	b, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(b), err
+}
+
+func checkPassword(hash, password string) error {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+}
+
+func generateToken(userID uint) (string, error) {
+	claims := &Claims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtSecret)
+}
+
+func parseTokenRaw(tokenStr string) (*Claims, error) {
+	if tokenStr == "" {
+		return nil, errors.New("empty token")
+	}
+	tokenStr = strings.TrimSpace(tokenStr)
+	parsed, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := parsed.Claims.(*Claims)
+	if !ok || !parsed.Valid {
+		return nil, errors.New("invalid token")
+	}
+	return claims, nil
+}
+
+// Middleware
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth == "" {
+			http.Error(w, "missing Authorization header", http.StatusUnauthorized)
+			return
+		}
+		parts := strings.SplitN(auth, " ", 2)
+		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			http.Error(w, "invalid Authorization header", http.StatusUnauthorized)
+			return
+		}
+		claims, err := parseTokenRaw(parts[1])
+		if err != nil {
+			http.Error(w, "invalid token: "+err.Error(), http.StatusUnauthorized)
+			return
+		}
+		// attach user id to context
+		ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func getUserID(r *http.Request) uint {
+	v := r.Context().Value("user_id")
+	if v == nil {
+		return 0
+	}
+	if id, ok := v.(uint); ok {
+		return id
+	}
+	// sometimes jwt lib gives float64 inside map claims; not here but safe fallback
+	if f, ok := v.(float64); ok {
+		return uint(f)
+	}
+	return 0
+}
+
+// HTTP handlers
+
+// Signup: POST /signup {"username","password"}
+func signupHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, "username and password required", http.StatusBadRequest)
+		return
+	}
+	h, err := hashPassword(req.Password)
+	if err != nil {
+		http.Error(w, "unable to hash password", http.StatusInternalServerError)
+		return
+	}
+	user := User{Username: req.Username, Password: h}
+	if err := db.Create(&user).Error; err != nil {
+		http.Error(w, "username might be taken", http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{"id": user.ID, "username": user.Username})
+}
+
+// Login: POST /login {"username","password"}
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	var user User
+	if err := db.Where("username = ?", req.Username).First(&user).Error; err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	if err := checkPassword(user.Password, req.Password); err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	token, err := generateToken(user.ID)
+	if err != nil {
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+// Create Task: POST /tasks {title, description}
+func createTaskHandler(w http.ResponseWriter, r *http.Request) {
+	uid := getUserID(r)
+	if uid == 0 {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		http.Error(w, "title required", http.StatusBadRequest)
+		return
+	}
+	t := Task{Title: req.Title, Description: req.Description, UserID: uid}
+	if err := db.Create(&t).Error; err != nil {
+		http.Error(w, "failed to create task", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(t)
+}
+
+// List Tasks: GET /tasks
+func listTasksHandler(w http.ResponseWriter, r *http.Request) {
+	uid := getUserID(r)
+	var tasks []Task
+	if err := db.Where("user_id = ?", uid).Find(&tasks).Error; err != nil {
+		http.Error(w, "failed to fetch tasks", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(tasks)
+}
+
+// Get Task: GET /tasks/{id}
+func getTaskHandler(w http.ResponseWriter, r *http.Request) {
+	uid := getUserID(r)
+	idStr := mux.Vars(r)["id"]
+	id, _ := strconv.Atoi(idStr)
+	var task Task
+	if err := db.First(&task, id).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if task.UserID != uid {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	json.NewEncoder(w).Encode(task)
+}
+
+// Update Task: PUT /tasks/{id}
+func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
+	uid := getUserID(r)
+	idStr := mux.Vars(r)["id"]
+	id, _ := strconv.Atoi(idStr)
+	var task Task
+	if err := db.First(&task, id).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if task.UserID != uid {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Completed   *bool  `json:"completed"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if req.Title != "" {
+		task.Title = req.Title
+	}
+	if req.Description != "" {
+		task.Description = req.Description
+	}
+	if req.Completed != nil {
+		task.Completed = *req.Completed
+	}
+	task.UpdatedAt = time.Now()
+	if err := db.Save(&task).Error; err != nil {
+		http.Error(w, "failed to update task", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(task)
+}
+
+// Mark Completed: PATCH /tasks/{id}/complete
+func completeTaskHandler(w http.ResponseWriter, r *http.Request) {
+	uid := getUserID(r)
+	idStr := mux.Vars(r)["id"]
+	id, _ := strconv.Atoi(idStr)
+	var task Task
+	if err := db.First(&task, id).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if task.UserID != uid {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	task.Completed = true
+	task.UpdatedAt = time.Now()
+	if err := db.Save(&task).Error; err != nil {
+		http.Error(w, "failed to mark completed", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(task)
+}
+
+// Delete Task: DELETE /tasks/{id}
+func deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+	uid := getUserID(r)
+	idStr := mux.Vars(r)["id"]
+	id, _ := strconv.Atoi(idStr)
+	var task Task
+	if err := db.First(&task, id).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	if task.UserID != uid {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if err := db.Delete(&task).Error; err != nil {
+		http.Error(w, "failed to delete", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func main() {
+	// Read JWT secret from env
+	s := os.Getenv("TODI_JWT_SECRET")
+	if s == "" {
+		log.Println("TODI_JWT_SECRET not set, using default (not for prod). Set env var in production!")
+		s = "please-change-me"
+	}
+	jwtSecret = []byte(s)
+
+	var err error
+	db, err = gorm.Open(sqlite.Open("todi.db"), &gorm.Config{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Auto-migrate
+	db.AutoMigrate(&User{}, &Task{})
+
+	r := mux.NewRouter()
+	// Public
+	r.HandleFunc("/signup", signupHandler).Methods("POST")
+	r.HandleFunc("/login", loginHandler).Methods("POST")
+
+	// Protected
+	sub := r.PathPrefix("/tasks").Subrouter()
+	sub.Use(authMiddleware)
+	sub.HandleFunc("", createTaskHandler).Methods("POST")
+	sub.HandleFunc("", listTasksHandler).Methods("GET")
+	sub.HandleFunc("/{id:[0-9]+}", getTaskHandler).Methods("GET")
+	sub.HandleFunc("/{id:[0-9]+}", updateTaskHandler).Methods("PUT")
+	sub.HandleFunc("/{id:[0-9]+}/complete", completeTaskHandler).Methods("PATCH")
+	sub.HandleFunc("/{id:[0-9]+}", deleteTaskHandler).Methods("DELETE")
+
+	addr := ":8080"
+	log.Printf("Server listening on %s", addr)
+	http.ListenAndServe(addr, r)
+}
