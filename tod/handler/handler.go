@@ -2,10 +2,30 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 	"tod/auth"
 	"tod/model"
 )
+
+func GetUserId(r *http.Request) uint {
+	v := r.Context().Value("user_id")
+	if v == nil {
+		return 0
+	}
+
+	if i, ok := v.(uint); ok {
+		return i
+	}
+
+	// sometimes jwt lib gives float64 inside map claims; not here but safe fallback
+	if f, ok := v.(float64); ok {
+		return uint(f)
+	}
+
+	return 0
+}
 
 // SignupHandler handles user registration
 func SignupHandler(w http.ResponseWriter, r *http.Request) {
@@ -85,10 +105,41 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Generate a JWT token for the authenticated user
 	token, err := auth.GenerateToken(user.ID)
 	if err != nil {
-		http.Error(w, "failed to create token", http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("%s", err), http.StatusBadRequest)
 		return
 	}
 
 	// Return the token to the client
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+func CreateTakHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	user_id := GetUserId(r)
+
+	task := model.Task{
+		Title:       req.Title,
+		Description: req.Description,
+		CreatedAt:   time.Now(),
+		UserId:      user_id,
+		Completed:   false,
+	}
+
+	if err := model.Db.Create(&task).Error; err != nil {
+		http.Error(w, "unable to save task", http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Task Created Succesfuuly"})
 }

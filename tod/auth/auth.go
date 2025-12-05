@@ -22,8 +22,7 @@ func GenerateToken(userId uint) (string, error) {
 		},
 	}
 
-	// Create the token using the claims and the ES256 signing method (elliptic curve algorithm)
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	// Sign and generate the final token string using a secret key (JwtSecretKey) defined in the model package
 	return token.SignedString(model.JwtSecretKey)
