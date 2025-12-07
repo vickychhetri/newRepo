@@ -107,10 +107,92 @@ The make() function takes two arguments: the first is the type of the slice you 
   The length of the slice is not fixed and can be changed dynamically as elements are added or removed.
 
 Here’s an example to create a slice of strings with a length of 5:
-
 mySlice := make([]string, 5)
 
 You can access and modify the elements in the slice using their index.
 
 
 
+
+====>> How will you perform inheritance with Golang?
+This is a trick golang interview question because Golang does not support classes, hence there is no inheritance.
+However, you may use composition to imitate inheritance behavior by 
+leveraging an existing struct object to establish the initial behavior of a new object.
+ Once the new object is created, the functionality of the original struct can be enhanced
+
+package main
+
+import "fmt"
+
+// Base struct
+type Animal struct {
+    Name string
+}
+
+// Method of Animal
+func (a Animal) Speak() {
+    fmt.Println(a.Name, "makes a sound")
+}
+
+// Derived struct using composition
+type Dog struct {
+    Animal // embedding Animal struct
+    Breed  string
+}
+
+// Overriding Speak method
+func (d Dog) Speak() {
+    fmt.Println(d.Name, "barks")
+}
+
+func main() {
+    a := Animal{Name: "Generic Animal"}
+    a.Speak() // Output: Generic Animal makes a sound
+
+    d := Dog{
+        Animal: Animal{Name: "Buddy"}, // initializing embedded struct
+        Breed:  "Labrador",
+    }
+    d.Speak()         // Output: Buddy barks
+    d.Animal.Speak()  // Output: Buddy makes a sound (accessing original method)
+}
+
+
+
+===> How do you create an array in Go?
+Creating an array in Go is simple. First, you need to declare the array by specifying its type and size. 
+You can do this by using the following syntax:
+var myArray [size]datatype
+Replace size and datatype with the size and data type you want to use for your array. 
+After declaring the array, you can then initialize it by assigning values to each index.
+You can also access and modify elements of the array using their index number.
+Arrays in Go have fixed sizes, meaning you cannot add or remove elements once they are declared.
+
+
+
+==> What are some benefits of using Go?
+This is an important Golang interview question. Go is an attempt to create a new, 
+concurrent, garbage-collected language with quick compilation and the following advantages:
+
+On a single machine, a big Go application can be compiled in a matter of seconds.
+Go provides an architecture for software development that simplifies dependency analysis 
+while avoiding much of the complexity associated with C-style programs, such as files and libraries.
+
+Because there is no hierarchy in Go's type system, no work is wasted describing the relationships between types. 
+Furthermore, while Go uses static types, the language strives to make types feel lighter weight than in
+traditional OO languages.
+
+Go is fully garbage-collected and supports parallel execution and communication at a fundamental level.
+
+Go's design presents a method for developing system software on multicore processors.
+
+
+
+
+==> What is a Goroutine and how do you stop it?
+A Goroutine is a function or procedure that runs concurrently with other Goroutines on a dedicated Goroutine thread.
+ Goroutine threads are lighter than ordinary threads, and most Golang programs
+  use thousands of goroutines at the same time.
+A Goroutine can be stopped by passing it a signal channel. 
+Because Goroutines can only respond to signals if they are
+ taught to check, you must put checks at logical places, such as at the top of your for a loop.
