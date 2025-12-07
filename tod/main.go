@@ -109,6 +109,11 @@ func main() {
 	sub := r.PathPrefix("/task").Subrouter()
 	sub.Use(authMiddleware)
 	sub.HandleFunc("", handler.CreateTakHandler).Methods("POST")
+	sub.HandleFunc("", handler.GetAllTaskHandler).Methods("GET")
+	sub.HandleFunc("/{id:[0-9]+}", handler.GetSingleTaskHandler).Methods("GET")
+	sub.HandleFunc("/{id:[0-9]+}", handler.UpdateTaskHandler).Methods("PUT")
+	sub.HandleFunc("/{id:[0-9]+}", handler.DeleteTaskHandler).Methods("DELETE")
+	sub.HandleFunc("/{id:[0-9]+}", handler.CompleteTaskHandler).Methods("PATCH")
 
 	addr := ":8080"
 	fmt.Printf("Server Listening at port:  %s", addr)

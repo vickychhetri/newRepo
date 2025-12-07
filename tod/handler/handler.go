@@ -7,6 +7,8 @@ import (
 	"time"
 	"tod/auth"
 	"tod/model"
+
+	"github.com/gorilla/mux"
 )
 
 func GetUserId(r *http.Request) uint {
@@ -142,4 +144,121 @@ func CreateTakHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Task Created Succesfuuly"})
+}
+
+func UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
+	userId := GetUserId(r)
+	idStr := mux.Vars(r)["id"]
+
+	var task model.Task
+	if err := model.Db.Where("id= ? AND user_id=?", idStr, userId).Find(&task).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		Title       string `json:title`
+		Description string `json:description`
+		Completed   *bool  `json: completed`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request"+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Description != "" {
+		task.Description = req.Description
+	}
+	if req.Title != "" {
+		task.Title = req.Title
+	}
+
+	if req.Completed != nil {
+		task.Completed = *req.Completed
+	}
+	task.UpdatedAt = time.Now()
+	if err := model.Db.Save(&task).Error; err != nil {
+		http.Error(w, "Unable to save Task", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(task)
+}
+
+func GetAllTaskHandler(w http.ResponseWriter, r *http.Request) {
+	var tasks []model.Task
+	var userId = GetUserId(r)
+
+	if err := model.Db.Where("user_id=?", userId).Find(&tasks).Error; err != nil {
+		http.Error(w, "unable to get tasks", http.StatusBadRequest)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tasks": tasks,
+	})
+}
+
+func GetSingleTaskHandler(w http.ResponseWriter, r *http.Request) {
+	var userId = GetUserId(r)
+	var idStr = mux.Vars(r)["id"]
+	var task model.Task
+	if err := model.Db.Where("id=? AND user_id=? ", idStr, userId).First(&task).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"task": task,
+	})
+}
+
+func DeleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+	var userId = GetUserId(r)
+	var idStr = mux.Vars(r)["id"]
+	var task model.Task
+	if err := model.Db.Where("id=? AND user_id=? ", idStr, userId).First(&task).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+
+	if err := model.Db.Delete(&task).Error; err != nil {
+		http.Error(w, "Unable to delete", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"task":    task,
+		"message": "deleted succesfully",
+	})
+}
+
+func CompleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	userId := GetUserId(r)
+
+	var task model.Task
+
+	if err := model.Db.Where("id=? AND user_id=?", idStr, userId).First(&task).Error; err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	message := ""
+	if task.Completed {
+		task.Completed = false
+		message = "task marked not-completed"
+
+	} else {
+		task.Completed = true
+		message = "task marked completed succesfully"
+	}
+
+	if err := model.Db.Save(&task).Error; err != nil {
+		http.Error(w, "unable to mark completed", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": message,
+	})
 }
