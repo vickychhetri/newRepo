@@ -196,3 +196,37 @@ A Goroutine is a function or procedure that runs concurrently with other Gorouti
 A Goroutine can be stopped by passing it a signal channel. 
 Because Goroutines can only respond to signals if they are
  taught to check, you must put checks at logical places, such as at the top of your for a loop.
+
+
+ package main
+
+import (
+    "fmt"
+    "time"
+)
+
+func worker(stopChan chan bool) {
+    for {
+        select {
+        case <-stopChan:
+            fmt.Println("Goroutine received stop signal. Exiting...")
+            return
+        default:
+            fmt.Println("Goroutine is working...")
+            time.Sleep(500 * time.Millisecond)
+        }
+    }
+}
+
+func main() {
+    stopChan := make(chan bool)
+
+    go worker(stopChan) // start Goroutine
+
+    time.Sleep(2 * time.Second) // let it work for a while
+    stopChan <- true             // send stop signal
+
+    // wait a little to ensure Goroutine finishes
+    time.Sleep(1 * time.Second)
+    fmt.Println("Main function exiting.")
+}
