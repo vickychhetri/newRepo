@@ -1,0 +1,116 @@
+====>>  How do you range over a channel in Go?
+To range over a channel in Go, a for loop with the range keyword can be used.
+ This allows you to iterate over all the values sent on the channel until it is closed.
+ When using range, the loop will continue until the channel is closed or until no more values are available.
+
+Here is an example of how to range over a channel in Go:
+ch := make(chan int)
+// add values to the channel
+go func(){
+    for i:=0;i<10;i++{
+        ch <-i
+    }
+    close(ch)
+}()
+//range over the channel
+for value := range ch {
+    fmt.Println(value)
+}
+
+
+====>> How do you close a channel in Go?
+The close() function is used to close a channel in Go. The function is used to indicate that no more values will be sent through the channel. 
+Once a channel is closed, any subsequent attempt to send data through it will result in a runtime panic.
+However, receiving from a closed channel is still possible.
+With the built-in v, ok := <-ch syntax, you can receive values from a closed channel.
+The ok boolean flag will be set to false if the channel is closed.
+It's important to note that closed channels should only be used for signaling and not for synchronization.
+
+
+
+====>> How do you create a channel in Go?
+You can use the built-in make function with the chan keyword to create a channel in Go. Here's an example:
+ch := make(chan int)
+In the above code, a channel called ch has been created that can transmit integers.
+ This channel can be used to send and receive data between goroutines.
+By default, channels are unbuffered, meaning that the sender blocks until the receiver is ready. 
+You can also create buffered channels by providing a buffer capacity as a second argument to the make function.
+Channels are a powerful synchronization mechanism in Go, allowing safe communication and
+coordination between concurrent processes.
+
+
+
+====>> What is a channel in Go?
+In Go, a channel is a data structure that allows goroutines (concurrent functions) 
+to communicate and synchronize with each other.
+It can be thought of as a conduit through which you can pass values between goroutines.
+A channel has a specific type that indicates the type of values that can be sent and received on it.
+Channels can be used to implement synchronization between goroutines and data sharing.
+ They provide a safe and efficient way to coordinate the flow of information,
+  ensuring that goroutines can send and receive data in a controlled and synchronized manner.
+
+====>> What are the looping constructs in Go?
+There is only one looping construct in Go: the for loop. 
+The for loop is made up of three parts that are separated by semicolons:
+Before the loop begins, the Init statement is run. It is frequently a variable declaration that 
+is only accessible within the scope of the for a loop.
+Before each iteration, the condition statement is evaluated as a Boolean to determine if the loop should continue.
+At the end of each cycle, the post statement is executed.
+
+
+====>> What is a goroutine in Go?
+A goroutine is a lightweight thread of execution that enables concurrent programming. 
+It is a function that can be run concurrently with other goroutines. 
+It is managed by the Go runtime and has a very small footprint compared to threads in other programming languages.
+Goroutines are more efficient in terms of memory usage and can be created and destroyed quickly.
+They can communicate with each other through channels, which provide a safe way to exchange data and synchronize their execution.
+This allows for efficient and scalable concurrent programming in Go.
+
+====>> How do you iterate through a map in Go?
+To iterate through a map in Go, you can use a for loop combined with the range keyword. For example:
+
+mapi := make(map[string][int])
+mapi["strong"]= 23
+for key, value := range mapi {
+    // do sopmething with key and value
+}
+In this loop, key represents the key of each key-value pair in the map, and value represents
+the corresponding value. You can perform any desired operation within the loop.
+The range keyword automatically iterates over the 
+ map and gives you access to its keys and values.
+
+
+====>> How do you create a map in Go?
+You can use the make keyword, followed by the map keyword and the data types for the key and value. 
+The syntax would be make(map[keyType]valueType).
+For example, to create a map of string keys and integer values, you would use make(map[string]int).
+ You can assign values to the map using the bracket notation such as mapName[key] = value. To access values, 
+ simply use mapName[key].
+Remember, maps in Go are unordered collections of key-value pairs, 
+making them useful for storing and retrieving data efficiently.
+
+
+====>> What is the difference between an array and a slice in Go?
+In Go, an array is a fixed-length sequence of elements of the same type. Once an array is defined,
+the length cannot be changed. On the other hand, 
+a slice is a dynamically-sized, flexible view of an underlying array.
+It is created with a variable length and can be resized.
+Slices are typically used when you need to work with a portion of an array 
+or when you want to pass a subset of an array to a function.
+Slices provide more flexibility and are widely used in Go for their convenience 
+and efficiency in managing collections of data.
+
+====>> How do you create a slice in Go?
+You first need to define a variable of type slice using the make() function. 
+The make() function takes two arguments: the first is the type of the slice you want to create
+ (for example, []string for a slice of strings) and the second is the length of the slice.
+  The length of the slice is not fixed and can be changed dynamically as elements are added or removed.
+
+Here’s an example to create a slice of strings with a length of 5:
+
+mySlice := make([]string, 5)
+
+You can access and modify the elements in the slice using their index.
+
+
+
