@@ -189,7 +189,7 @@ func GetAllTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var tasks []model.Task
 	var userId = GetUserId(r)
 
-	if err := model.Db.Where("user_id=?", userId).Find(&tasks).Error; err != nil {
+	if err := model.Db.Preload("User").Where("user_id=?", userId).Find(&tasks).Error; err != nil {
 		http.Error(w, "unable to get tasks", http.StatusBadRequest)
 		return
 	}

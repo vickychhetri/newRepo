@@ -36,4 +36,5 @@ type Task struct {
 	CreatedAt   time.Time `gorm:"comment:Record creation time" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"comment:Record last update time" json:"updated_at"`
 	UserId      uint      `gorm:"not null;comment:Foreign key referencing users.id" json:"user_id"`
+	User        User      `gorm:"foreignKey:UserId" json:"user"`
 }

@@ -1,0 +1,188 @@
+1. Create a simple stored procedure (MySQL)
+
+Example procedure to get all tasks:
+
+DELIMITER $$
+
+CREATE PROCEDURE GetTasks()
+BEGIN
+    SELECT id, title, description, completed, user_id FROM tasks;
+END $$
+
+DELIMITER ;
+
+
+
+✅ 2. Call stored procedure (no parameters)
+Go Struct:
+type Task struct {
+	ID          uint
+	Title       string
+	Description string
+	Completed   bool
+	UserID      uint
+}
+
+
+
+
+Select from procedure:
+rows, err := db.Query("CALL GetTasks()")
+if err != nil {
+    panic(err)
+}
+defer rows.Close()
+
+var tasks []Task
+
+for rows.Next() {
+    var t Task
+    err := rows.Scan(&t.ID, &t.Title, &t.Description, &t.Completed, &t.UserID)
+    if err != nil {
+        panic(err)
+    }
+    tasks = append(tasks, t)
+}
+
+fmt.Printf("%+v\n", tasks)
+
+
+
+
+✅ 3. Stored procedure with IN parameters
+
+Example:
+
+DELIMITER $$
+
+CREATE PROCEDURE GetTasksByUser(IN uid INT)
+BEGIN
+    SELECT id, title, description, completed, user_id
+    FROM tasks
+    WHERE user_id = uid;
+END $$
+
+DELIMITER ;
+
+
+
+rows, err := db.Query("CALL GetTasksByUser(?)", userID)
+if err != nil {
+    panic(err)
+}
+defer rows.Close()
+
+var tasks []Task
+for rows.Next() {
+    var t Task
+    rows.Scan(&t.ID, &t.Title, &t.Description, &t.Completed, &t.UserID)
+    tasks = append(tasks, t)
+}
+
+
+
+
+✅ 4. Stored procedure with OUT parameter
+
+MySQL procedure:
+
+DELIMITER $$
+
+CREATE PROCEDURE CountTasks(
+    IN uid INT,
+    OUT total INT
+)
+BEGIN
+    SELECT COUNT(*) INTO total
+    FROM tasks
+    WHERE user_id = uid;
+END $$
+
+DELIMITER ; 
+
+
+
+
+var total int
+
+// CALL procedure
+_, err := db.Exec("CALL CountTasks(?, @total)", userID)
+if err != nil {
+    panic(err)
+}
+
+// Read OUT parameter
+row := db.QueryRow("SELECT @total")
+err = row.Scan(&total)
+if err != nil {
+    panic(err)
+}
+
+fmt.Println("Total tasks:", total)
+
+
+
+
+
+✅ 5. Insert using stored procedure
+
+Procedure:
+
+DELIMITER $$
+
+CREATE PROCEDURE AddTask(
+    IN title VARCHAR(150),
+    IN description VARCHAR(500),
+    IN completed BOOLEAN,
+    IN user_id INT
+)
+BEGIN
+    INSERT INTO tasks (title, description, completed, user_id)
+    VALUES (title, description, completed, user_id);
+END $$
+
+DELIMITER ;
+
+
+
+
+_, err := db.Exec("CALL AddTask(?, ?, ?, ?)",
+    "Buy Milk",
+    "Go to shop",
+    false,
+    3,
+)
+if err != nil {
+    panic(err)
+}
+
+
+
+
+
+✅ 6. Using stored procedures inside a TRANSACTION
+tx, err := db.Begin()
+if err != nil {
+    panic(err)
+}
+
+_, err = tx.Exec("CALL AddTask(?, ?, ?, ?)",
+    "Task from TX",
+    "Testing TX",
+    false,
+    5,
+)
+if err != nil {
+    tx.Rollback()
+    panic(err)
+}
+
+_, err = tx.Exec("CALL CountTasks(?, @total)", 5)
+if err != nil {
+    tx.Rollback()
+    panic(err)
+}
+
+if err := tx.Commit(); err != nil {
+    panic(err)
+}

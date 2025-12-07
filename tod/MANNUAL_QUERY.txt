@@ -1,0 +1,200 @@
+
+. Setup — Connect to DB
+// import (
+// 	"database/sql"
+// 	"fmt"
+// 	_ "github.com/go-sql-driver/mysql"
+// )
+
+// func main() {
+// 	db, err := sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/yourdb")
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	defer db.Close()
+// }
+
+
+
+🚀 2. INSERT (Create)
+query := `
+    INSERT INTO tasks (title, description, completed, user_id)
+    VALUES (?, ?, ?, ?)
+`
+
+res, err := db.Exec(query, "Buy Milk", "Go to store", false, 3)
+if err != nil {
+    panic(err)
+}
+
+lastId, _ := res.LastInsertId()
+fmt.Println("Inserted task ID:", lastId)
+
+
+
+🔍 3. SELECT (Read) – get tasks
+rows, err := db.Query("SELECT id, title, description, completed, user_id FROM tasks")
+if err != nil {
+    panic(err)
+}
+defer rows.Close()
+
+for rows.Next() {
+    var id, userId int
+    var title, desc string
+    var completed bool
+
+    rows.Scan(&id, &title, &desc, &completed, &userId)
+    fmt.Println(id, title, desc, completed, userId)
+}
+
+
+
+
+✏️ 4. UPDATE
+query := `
+    UPDATE tasks SET completed = ? WHERE id = ?
+`
+
+res, err := db.Exec(query, true, 1)
+if err != nil {
+    panic(err)
+}
+
+rowsAffected, _ := res.RowsAffected()
+fmt.Println("Rows updated:", rowsAffected)
+
+
+❌ 5. DELETE
+query := "DELETE FROM tasks WHERE id = ?"
+
+res, err := db.Exec(query, 1)
+if err != nil {
+    panic(err)
+}
+
+rowsDeleted, _ := res.RowsAffected()
+fmt.Println("Rows deleted:", rowsDeleted)
+
+
+
+
+
+🧪 6. SELECT with JOIN (Task + User)
+rows, err := db.Query(`
+    SELECT t.id, t.title, t.description, t.completed,
+           u.id, u.name, u.email
+    FROM tasks t
+    JOIN users u ON u.id = t.user_id
+`)
+if err != nil {
+    panic(err)
+}
+defer rows.Close()
+
+for rows.Next() {
+    var taskID, userID int
+    var title, desc, userName, userEmail string
+    var completed bool
+
+    rows.Scan(&taskID, &title, &desc, &completed, &userID, &userName, &userEmail)
+
+    fmt.Printf("Task: %d - %s (%v)\n", taskID, title, completed)
+    fmt.Printf("User: %d - %s - %s\n\n", userID, userName, userEmail)
+}
+
+
+
+
+🎯 Summary of Raw SQL Usage
+Operation	Code
+INSERT	db.Exec("INSERT ...")
+SELECT	db.Query("SELECT ...")
+UPDATE	db.Exec("UPDATE ... WHERE ...")
+DELETE	db.Exec("DELETE ... WHERE ...")
+JOIN SELECT	db.Query("SELECT ... JOIN ...")
+
+
+
+
+STRUCT + RAW query
+
+
+var tasks []Task
+
+rows, err := db.Query(`
+    SELECT id, title, description, completed, user_id
+    FROM tasks
+`)
+if err != nil {
+    panic(err)
+}
+defer rows.Close()
+
+for rows.Next() {
+    var t Task
+
+    err := rows.Scan(
+        &t.ID,
+        &t.Title,
+        &t.Description,
+        &t.Completed,
+        &t.UserId,
+    )
+    if err != nil {
+        panic(err)
+    }
+
+    tasks = append(tasks, t)
+}
+
+
+
+
+TRASACTION 
+Let’s say you want to:
+Insert a task
+Update user stats
+If anything fails → ROLLBACK
+If everything succeeds → COMMIT
+
+
+tx, err := db.Begin()
+if err != nil {
+    panic(err)
+}
+
+// 1️⃣ INSERT TASK
+insertTask := `
+    INSERT INTO tasks (title, description, completed, user_id)
+    VALUES (?, ?, ?, ?)
+`
+
+res, err := tx.Exec(insertTask, "Buy Milk", "Go to shop", false, 3)
+if err != nil {
+    tx.Rollback() // ❌ undo everything
+    panic(err)
+}
+
+taskID, _ := res.LastInsertId()
+fmt.Println("Inserted task ID:", taskID)
+
+
+// 2️⃣ UPDATE USER (for example, increase task count)
+updateUser := `
+    UPDATE users SET task_count = task_count + 1 WHERE id = ?
+`
+
+_, err = tx.Exec(updateUser, 3)
+if err != nil {
+    tx.Rollback() // ❌ undo the insert
+    panic(err)
+}
+
+
+// 3️⃣ EVERYTHING OK → COMMIT
+if err := tx.Commit(); err != nil {
+    panic(err)
+}
+
+fmt.Println("Transaction committed successfully")
