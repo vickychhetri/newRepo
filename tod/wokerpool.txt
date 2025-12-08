@@ -1,0 +1,104 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strconv"
+	"sync"
+	"time"
+)
+
+// clients
+// work
+
+// Client request to process
+type Client struct {
+	Id      int
+	integer int
+}
+
+// after processing keep here
+type Result struct {
+	job   Client
+	squre int
+}
+
+// THE RESULT STRUCT  IS USE TO KEEP CLIENT AND ITS RESULT
+
+/*
+**
+runtime.GOMAXPROCS sets or gets the maximum number of OS threads (CPU cores) that can execute Go code simultaneously.
+If you pass 0, it does NOT change anything.
+It simply returns the current value.
+
+If your system has 8 CPUs, default GOMAXPROCS = 8
+**
+*/
+var size = runtime.GOMAXPROCS(0)
+var clients = make(chan Client, size)
+var data = make(chan Result, size)
+
+func Worker(wg *sync.WaitGroup) {
+	for c := range clients {
+		squ := c.integer * c.integer
+		output := Result{job: c, squre: squ}
+		data <- output
+		time.Sleep(time.Second)
+	}
+	wg.Done()
+}
+
+func Create(n int) {
+	for i := 0; i < n; i++ {
+		c := Client{Id: i, integer: i}
+		clients <- c
+	}
+	close(clients)
+}
+
+func main() {
+	if len(os.Args) != 3 {
+		fmt.Println("Jobs & worker count required")
+		return
+	}
+
+	njobs, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		fmt.Println("Jobs Requried")
+		return
+	}
+
+	nWorker, err := strconv.Atoi(os.Args[2])
+	if err != nil {
+		fmt.Println("Worker requried ")
+		return
+	}
+
+	go Create(njobs)
+
+	finish := make(chan interface{})
+	go func() {
+		for d := range data {
+			fmt.Println("Client Id: ", d.job.Id)
+			fmt.Printf("squre of %d is %d\n: ", d.job.integer, d.squre)
+		}
+		finish <- true
+	}()
+
+	var wg sync.WaitGroup
+	for i := 0; i < nWorker; i++ {
+		wg.Add(1)
+		go Worker(&wg)
+	}
+
+	wg.Wait()
+
+	close(data)
+
+	fmt.Printf("finshed : %v\n", <-finish)
+
+}
+
+//if no response means not intersted , got it.
+//then you need to fucus on your work

@@ -230,3 +230,78 @@ func main() {
     time.Sleep(1 * time.Second)
     fmt.Println("Main function exiting.")
 }
+
+
+
+
+==> Explain string literals.
+A string literal is a character-concatenated string constant.
+ Raw string literals 
+ and interpreted string literals
+  are the two types of string literals.
+ 
+  Raw string literals are enclosed in backticks (foo) and contain uninterpreted UTF-8 characters.
+   Interpreted string literals are strings that are written within double quotes 
+   and can contain any character except newlines and unfinished double-quotes.
+
+
+===> Distinguish unbuffered from buffered channels.
+This is a popular Golang interview question. The sender will block on an unbuffered channel until 
+the receiver receives data from the channel, 
+and the receiver will block on the channel
+ until the sender puts data into the channel.
+The sender of the buffered channel will block when there is no empty slot on the channel,
+ however, the receiver will block on the channel when it is empty, 
+ as opposed to the unbuffered equivalent.
+
+
+
+==> What data types does Golang use?
+This is a common golang interview question. Golang uses the following types:
+
+Slice
+Struct
+Pointer
+Function
+Method
+Boolean
+Numeric
+String
+Array
+Interface
+Map
+Channel
+
+
+===>How do you create a constant in Go?
+To create a constant in Go, you can use the const keyword, 
+followed by the name of the constant and its value. The value must be 
+a compile-time constant such as a string, number, or boolean. Here's an example:
+
+const Pi = 3.14159
+
+After defining a constant, you can use it in your code throughout the program. 
+Note that constants cannot be reassigned or modified during the execution of the program.
+Creating constants allows you to give meaningful names to important 
+values that remain constant throughout your Go program.
+
+
+
+==> 10. What are the different types of data types in Go?
+The various data types in Go are:
+Numeric types: Integers, floating-point, and complex numbers.
+Boolean types: Represents true or false values.
+String types: Represents a sequence of characters.
+Array types: Stores a fixed-size sequence of elements of the same type.
+Slice types: Serves as a flexible and dynamic array.
+Struct types: Defines a collection of fields, each with a name and a type.
+Pointer types: Holds the memory address of a value.
+Function types: Represents a function.
+
+
+==> What are Golang packages?
+This is a common Golang interview question. Go Packages (abbreviated pkg) 
+are simply directories in the Go workspace that contain Go source files or 
+other Go packages. Every piece of code created in the source files,
+ from variables to functions, is then placed in a linked package. 
+ Every source file should be associated with a package.
